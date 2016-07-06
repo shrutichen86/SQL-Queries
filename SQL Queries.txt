@@ -1,0 +1,727 @@
+1. Year over Year comparison 
+
+select a.SalesPersonID,c.LastName,YEAR(DATEADD(MONTH,6,a.OrderDate)) as FY,
+DATEPART(QUARTER,DATEADD(MONTH,6,a.OrderDate)) as FQ,
+SUM(a.SubTotal) as FQSales,
+SUM(b.SubTotal) as SameSalesFQLast,
+SUM(a.SubTotal)-SUM(b.SubTotal) as Change,
+((SUM(a.SubTotal)-SUM(b.SubTotal)) /SUM(b.SubTotal)) * 100 as pct_change
+from [Sales].[SalesOrderHeader] a left join [Sales].[SalesOrderHeader] b
+on a.SalesPersonID=b.SalesPersonID
+and DATEPART(QUARTER,DATEADD(MONTH,6,b.OrderDate))=DATEPART(QUARTER,DATEADD(MONTH,6,a.OrderDate))
+and DATEPART(YEAR,DATEADD(MONTH,6,b.OrderDate))=DATEPART(YEAR,DATEADD(MONTH,6,a.OrderDate))-1
+inner join Person.[Person] c 
+on c.BusinessEntityID=a.SalesPersonID
+where DATEPART(YEAR,DATEADD(MONTH,6,a.OrderDate))=2008
+group by a.SalesPersonID,c.LastName,YEAR(DATEADD(MONTH,6,a.OrderDate)),
+DATEPART(QUARTER,DATEADD(MONTH,6,a.OrderDate)) 
+
+2. Promotional Effect
+
+select 
+a.SalesOrderID,
+a.OrderDate,
+d.Name as Ship_to_State,
+a.SubTotal as Historical_Order_Total,
+a.Freight as Historical_Freight,
+CASE WHEN a.SubTotal>=1700 and a.SubTotal<2000 THEN 'Increase order to 2000 and pay 22 cents as Freight' WHEN a.SubTotal>=2000 THEN 'No Order Change but pay 22 cents as Freight' ELSE 'No order change and pay historical freight' END as Promo_Effect,
+CASE WHEN a.SubTotal>=1700 and a.SubTotal<2000 THEN 2000 - a.SubTotal ELSE 0 END as Potential_Order_Gain,
+CASE WHEN a.SubTotal>=1700 THEN 0.22 else a.Freight END  - a.Freight as PotentialFreightoss,
+(CASE WHEN a.SubTotal>=1700 and a.SubTotal<2000 then 2000 -a.SubTotal ELSE 0 END + CASE WHEN a.SubTotal>=1700 THEN 0.22 ELSE a.Freight END )- a.Freight as PromoNetGain_Loss
+from [Sales].[SalesOrderHeader] a join Person.BusinessEntityAddress b
+on a.ShipToAddressID=b.AddressID
+join Person.[Address] c ON b.AddressID = c.AddressID
+ join Person.StateProvince d
+on c.StateProvinceID=d.StateProvinceID
+where d.Name = 'California' and DATEPART (YEAR, DATEADD (MONTH, 6,a.OrderDate)) = 2008
+
+
+4. Upsell Tuesdays
+
+select 
+DAtename(WEEKDAY,a.OrderDate) as Day_of_Week,
+count(*) as Orders,
+sum(a.SubTotal) as Revenue,
+sum(a.SubTotal)/count(*) as Revenue_per_order
+from
+[Sales].[SalesOrderHeader] a
+where a.OnlineOrderFlag=0 and YEAR(a.OrderDate)=2008
+group by DAtename(WEEKDAY,a.OrderDate)
+ORDER BY sum(a.SubTotal)/count(a.SalesOrderID) desc
+
+9. Part 2 
+
+select a.Bikes, a.Accessories,a.Clothing,a.Components,count(distinct a.SalesOrderID)
+from
+(select b.SalesOrderID,
+MAX(case when e.Name='Bikes' THEN 1 ELSE 0 END) as Bikes,
+MAX(case when e.Name='Components' THEN 1 ELSE 0 END) as Components,
+MAX(case when e.Name='Clothing' THEN 1 ELSE 0 END) as Clothing,
+MAX(case when e.Name='Accessories' THEN 1 ELSE 0 END) as Accessories
+from [Sales].[SalesOrderDetail] a join [Sales].[SalesOrderHeader] b
+on a.SalesOrderID=b.SalesOrderID
+join [Production].[Product] c
+on a.ProductId=c.ProductID
+join [Production].[ProductSubcategory] d
+on c.ProductSubcategoryID=d.ProductSubcategoryID
+join [Production].[ProductCategory] e 
+on e.ProductCategoryID=d.ProductCategoryID
+group by b.SalesOrderID) a
+group by  a.Bikes, a.Accessories,a.Clothing,a.Components
+order by a.Bikes, a.Accessories,a.Clothing,a.Components
+
+9. Part 3
+select a.M, a.S,a.T,a.R,count(distinct a.CustomerID)
+from
+(select b.CustomerID,
+MAX(case when c.ProductLine='M' THEN 1 ELSE 0 END) as M,
+MAX(case when c.ProductLine='S' THEN 1 ELSE 0 END) as S,
+MAX(case when c.ProductLine='T' THEN 1 ELSE 0 END) as T,
+MAX(case when c.ProductLine='R' THEN 1 ELSE 0 END) as R
+from [Sales].[SalesOrderDetail] a join [Sales].[SalesOrderHeader] b
+on a.SalesOrderID=b.SalesOrderID
+join [Production].[Product] c
+on a.ProductId=c.ProductID
+group by b.CustomerID) a
+group by  a.M, a.S,a.T,a.R
+order by a.M, a.S,a.T,a.R
+
+12.
+select b.name,count(distinct a.ProductID)  ProductCount,sum(a.Quantity) as ProductQty
+from [Production].[ProductInventory] a join [Production].[Location] b
+on a.LocationID=b.LocationID
+group by (b.name)
+UNION
+select 'Total' , count(distinct a.ProductID)  ProductCount,sum(a.Quantity) as ProductQty
+from [Production].[ProductInventory] a
+
+13.
+select SUBSTRING(a.NationalIDNumber,LEN(a.NationalIDNumber)-4,4) as ID_NUM ,
+b.FirstName,
+b.LastName,
+a.JobTitle,
+MAX(a.VacationHours) AS VACHOURS
+from
+[HumanResources].[Employee] a join [Person].[Person] b
+on a.BusinessEntityID=b.BusinessEntityID
+group by SUBSTRING(a.NationalIDNumber,LEN(a.NationalIDNumber)-4,4),
+b.FirstName,
+b.LastName,
+a.JobTitle
+having MAX(a.VacationHours)=(select max(b.VacationHours) from [HumanResources].[Employee] b)
+
+14.
+select b.ProductID,c.Name,a.OrderDate,sum(b.OrderQty) as QTY
+from [Purchasing].[PurchaseOrderHeader] a join [Purchasing].[PurchaseOrderDetail] b
+on a.PurchaseOrderID=b.PurchaseOrderID 
+join [Production].[Product] c
+on b.ProductID=c.ProductID
+where YEAR(a.OrderDate)=2007
+group by  b.ProductID,c.Name,a.OrderDate
+order by sum(b.OrderQty) DESC
+
+15.
+select a.ProductModelID,a.Name,c.Description,b.CultureID
+from 
+[Production].[ProductModel] a join [Production].[ProductModelProductDescriptionCulture] b
+on a.ProductModelID=b.ProductModelID join  [Production].[ProductDescription] c
+on b.ProductDescriptionID=c.ProductDescriptionID
+where b.CultureID!='en'
+
+16.
+select a.TerritoryID,
+count(*) as Total_Orders,
+ROUND(CONVERT(FLOAT,(SUM(CASE WHEN a.OnlineOrderFlag = 1 THEN 1 ELSE 0 END)))/count(*)* 100,0) as Online_Order,
+ROUND(CONVERT(FLOAT,(SUM(CASE WHEN a.OnlineOrderFlag = 0 THEN 1 ELSE 0 END)))/count(*)* 100,0) as Offline_Order
+from [Sales].[SalesOrderHeader] a
+group by a.TerritoryID
+order by a.TerritoryID
+
+17.
+select a.CustomerID,c.StoreID,b.BusinessEntityID,b.Name,max(a.OrderDate),DATEDIFF(MONTH,max(a.OrderDate),'2008-10-07')
+from [Sales].[SalesOrderHeader] a join [Sales].[Customer] c 
+on a.CustomerID=c.CustomerID join [Sales].[Store] b
+on c.StoreID=b.BusinessEntityID
+group by  a.CustomerID,c.StoreID,b.BusinessEntityID,b.Name
+having DATEDIFF(MONTH,max(a.OrderDate),'2008-10-07')>=12
+order by DATEDIFF(MONTH,max(a.OrderDate),'2008-10-07') DESC
+
+18.
+select a.ProductID,a.Name as ProducTName,b.Name as SubCategory,
+min(d.StandardCost) as MIN_COST,max(d.StandardCost)as MAX_COST,max(d.StandardCost)-min(d.StandardCost) as variability,
+ROW_NUMBER() over (order by max(d.StandardCost)-min(d.StandardCost) DESC)
+from 
+[Production].[Product] a join Production.ProductSubcategory b on
+a.ProductSubcategoryID=b.ProductSubcategoryID join [Production].[ProductCostHistory] d
+on a.ProductID=d.ProductID
+group by a.ProductID,a.Name,b.Name
+order by max(d.StandardCost)-min(d.StandardCost) DESC
+
+19.
+select a.ProductID,a.ProductName,a.Scrapping_Reason,a.WorkOrder_count from
+(select a.ProductID,a.Name as ProductName,c.Name as Scrapping_Reason,count(b.WorkOrderID) as WorkOrder_count,
+ROW_NUMBER() over (partition by a.ProductID order by count(b.WorkOrderID) DESC) as RANKING
+from 
+[Production].[Product] a join [Production].[WorkOrder] b
+on a.ProductID=b.ProductID
+join [Production].[ScrapReason] c
+on c.ScrapReasonID=b.ScrapReasonID
+where b.ScrapReasonID IS NOT NULL
+group by  a.ProductID,a.Name,c.Name) a
+where a.RANKING=1
+
+20.
+select d.Name as StoreName,a.AddressLine1,a.AddressLine2,a.City,c.Name,a.PostalCode
+from [Person].[Address] a join [Person].[BusinessEntityAddress] b
+on a.AddressID=b.AddressID 
+join [Person].[StateProvince] c 
+on a.StateProvinceID=c.StateProvinceID
+join [Sales].[Store] d
+on d.BusinessEntityID=b.BusinessEntityID
+where b.AddressTypeID=3 and a.City='Toronto'
+
+21.
+select d.FirstName,d.LastName,c.JobTitle,c.BirthDate,c.MaritalStatus,a.StartDate as Hire_Date
+from 
+[HumanResources].[EmployeeDepartmentHistory] a join [HumanResources].[Department] b
+on a.DepartmentID=b.DepartmentID
+join [HumanResources].[Employee] c
+on c.BusinessEntityID=a.BusinessEntityID
+join  [Person].[Person] d
+on d.BusinessEntityID=a.BusinessEntityID
+where (YEAR(a.StartDate)<2002 or YEAR(a.StartDate)>2004) and b.Name='Marketing' and a.EndDate IS NULL
+
+22.
+select a.ProductReviewID,a.ProductID,b.Name,a.ReviewerName,a.Rating,a.EmailAddress,c.BusinessEntityID
+from [Production].[ProductReview] a join [Production].[Product] b
+on a.ProductID=b.ProductID
+left outer join [Person].[EmailAddress] c
+on a.EmailAddress=c.EmailAddress
+
+23.
+select a.SalesOrderID,a.OrderDate,c.Name,f.FirstName,f.LastName,g.PhoneNumber
+from [Sales].[SalesOrderHeader] a join [Sales].[SalesOrderDetail] b
+on a.SalesOrderID=b.SalesOrderID
+join [Production].[Product] c
+on b.ProductID=c.ProductID
+join [Sales].[Customer] e
+on e.CustomerID=a.CustomerID
+join [Person].[Person] f
+on e.PersonID=f.BusinessEntityID
+join [Person].[PersonPhone] g
+on g.BusinessEntityID=f.BusinessEntityID
+where a.OrderDate>'2008-07-07' and a.OnlineOrderFlag=1 and LOWER(c.Name) LIKE '%shorts%'
+order by a.SalesOrderID
+
+24.
+select 
+case 
+WHEN a.EmailPromotion=0 THEN 'Contact does not wish to receive e-mail Promotions'
+WHEN a.EmailPromotion=1 THEN 'Contact dose not wish to receive e-mail promotions from AdventureWorks'
+WHEN a.EmailPromotion=2 THEN 'Contact does wish to receive e-mail promotions from AdventureWorks and selected partners'
+END as Email_preference
+,count(*) as COUNT_PEOPLE
+from [Person].[Person] a
+where a.PersonType='IN'
+group by 
+case 
+WHEN a.EmailPromotion=0 THEN 'Contact does not wish to receive e-mail Promotions'
+WHEN a.EmailPromotion=1 THEN 'Contact dose not wish to receive e-mail promotions from AdventureWorks'
+WHEN a.EmailPromotion=2 THEN 'Contact does wish to receive e-mail promotions from AdventureWorks and selected partners'
+END
+
+25.
+select a.FiscalYear,a.TerritoryName,a.Revenue,a.Ranking from
+(select YEAR(DATEADD(MONTH, 6, a.OrderDate)) as FiscalYear,b.Name as TerritoryName,sum(a.Subtotal) as Revenue,
+row_number() over (partition by YEAR(DATEADD(MONTH, 6, a.OrderDate)) order by sum(a.Subtotal) DESC) as RANKING
+from [Sales].[SalesOrderHeader] a join [Sales].[SalesTerritory] b
+on a.TerritoryID=b.TerritoryID
+where YEAR(DATEADD(MONTH, 6, a.OrderDate)) in (2006,2007)
+group by YEAR(DATEADD(MONTH, 6, a.OrderDate)) ,b.Name 
+) a
+where a.RANKING<3
+
+26.
+select a.BusinessEntityID,max(a.CommissionPct),max(a.Bonus),
+row_number() over ( order by max(a.CommissionPct) DESC,max(a.Bonus) DESC) 
+from [Sales].[SalesPerson] a
+group by a.BusinessEntityID
+order by max(a.CommissionPct) DESC
+
+27.
+/* Part 1: Report No of Work Orders by ProductID. Order in DESC order of Work Orders */
+
+select a.ProductID,count(a.WorkOrderID) as WorkOrderCount
+from  [Production].[WorkOrder] a
+group by a.ProductID
+order by count(a.WorkOrderID) DESC
+/* Part 2: Report No of Work Orders by Product Name.Order in DESC order of Work Orders */
+
+select b.Name,count(a.WorkOrderID) as WorkOrderCount
+from  [Production].[WorkOrder] a join [Production].[Product] b
+on a.ProductID=b.ProductID
+group by b.Name
+order by count(a.WorkOrderID) DESC
+
+28.
+/*Part 1:Using revenue informatiom from May 1st-23rd 2008 estimate revenue for whole month of May
+Output: No of days in month so far,Total Revenue in month so far,Revenue per day for month so far,Monthly Revenue trended for all of May*/
+select DATEDIFF(DAY,'2008-05-01','2008-05-23')+ 1 as NofDaysinMonthSoFar,
+sum(a.SubTotal) as RevenueinMonthSofar,
+(sum(a.SubTotal))/(DATEDIFF(DAY,'2008-05-01','2008-05-23')+ 1) as RevenuePerDay,
+DATEDIFF(DAY,'2008-05-01','2008-05-31')+ 1 as DaysinMonth,
+(sum(a.SubTotal))/(DATEDIFF(DAY,'2008-05-01','2008-05-23')+ 1) * 31 as MonthlyRevenueTrended
+from [Sales].[SalesOrderHeader] a
+where a.OrderDate>='2008-05-01'and a.OrderDate<='2008-05-23'
+
+
+/*Part 2:Actual Reveneue Per Day,Actual Revenue*/
+select sum(a.SubTotal)/31 as RevenuePerDay,sum(a.SubTotal) as TotalRevenue
+from [Sales].[SalesOrderHeader] a
+where a.OrderDate>='2008-05-01'and a.OrderDate<='2008-05-31'
+
+29.
+
+/* Separate usernames from Domains from Employee Table */
+
+
+select a.BusinessEntityID,a.LoginID,
+SUBSTRING(a.LoginID,1,CHARINDEX('\',a.LoginID,1)-1)  as Domain,
+SUBSTRING(a.LoginID,CHARINDEX('\',a.LoginID,1)+1,LEN(a.LoginID)) as Username
+from  [HumanResources].[Employee] a
+order by a.BusinessEntityID
+
+30.
+
+/* Create a Report with Department Name (Production),Shift Name,Number of Employees */
+
+select c.Name as DepartmentName, b.Name as ShiftName,count(a.BusinessEntityID) as NumofEmployees
+from [HumanResources].[EmployeeDepartmentHistory] a join [HumanResources].[Shift] b on
+a.ShiftID=b.ShiftID
+join [HumanResources].[Department] c
+on c.DepartmentID=a.DepartmentID
+where c.Name='Production' and a.EndDate IS NULL
+group by c.Name,b.Name 
+
+31. 
+Part 1
+/* Determine if variety of labels is sufficient to cover all alpha sized products */
+SELECT DISTINCT Size
+FROM Production.Product
+WHERE ISNUMERIC (Size) = 0 
+AND Size IS NOT NULL
+
+Part 2
+select b.Size,sum(a.Quantity) as CurrentQty,case when sum(a.Quantity)-1000 >0 THEN sum(a.Quantity)-1000 ELSE 0 END  as AdditionalLabels
+from [Production].[ProductInventory] a join Production.Product b
+on a.ProductID=b.ProductID
+where  ISNUMERIC (b.Size) = 0 
+AND b.Size IS NOT NULL
+group by b.Size
+
+32. 
+Part 1:
+
+/* Total no of employees in the company;% of employees who are Male and Female;Avg no of months of employment. Today is Jan 1st 2008 */
+select 
+count(a.BusinessEntityID) as EMP_COUNT,
+ROUND((sum(case when GENDER='M' THEN 1 ELSE 0 END)/CONVERT(FLOAT,count(a.BusinessEntityID))) * 100,2) as Pct_Male,
+ROUND((sum(case when GENDER='F' THEN 1 ELSE 0 END)/CONVERT(FLOAT,count(a.BusinessEntityID))) * 100,2) as Pct_Male,
+AVG(DATEDIFF(MONTH,a.HireDate,'2008-01-01')) as AVG_EMPLOYMENT
+from [HumanResources].[Employee] a
+
+Part 2:
+
+SELECT
+	X1.Quartile
+	,Employees =	COUNT (*)
+	,[%Male] =		ROUND (SUM (CASE WHEN X1.Gender = 'M' THEN 1 ELSE 0 END) / CONVERT (FLOAT, COUNT (*)) * 100, 2)
+	,[%Female] =	ROUND (SUM (CASE WHEN X1.Gender = 'F' THEN 1 ELSE 0 END) / CONVERT (FLOAT, COUNT (*)) * 100, 2)
+	,AvgMonthsEmp =	AVG (X1.MonthsEmployed)
+FROM (SELECT 
+		BusinessEntityID
+		,Quartile =			NTILE (4) OVER (ORDER BY DATEDIFF (MONTH, HireDate, '2008-01-01'))
+		,HireDate
+		,MonthsEmployed  =	DATEDIFF (MONTH, HireDate, '2008-01-01')
+		,Gender
+		FROM HumanResources.Employee) X1
+GROUP BY X1.Quartile
+
+33. 
+select
+a.JobTitle,
+case 
+when DATEDIFF(YY,a.BirthDate,'2008-01-01')<18 THEN '<18'
+when DATEDIFF(YY,a.BirthDate,'2008-01-01')<35 THEN '18 - 35'
+when DATEDIFF(YY,a.BirthDate,'2008-01-01') <50 THEN '36 - 50'
+when DATEDIFF(YY,a.BirthDate,'2008-01-01') <60 THEN '51 - 60'
+ELSE '61+'
+END as AGE_GROUP,
+b.Rate,
+count(a.BusinessEntityID) as No_of_Emps
+from [HumanResources].[Employee] a join [HumanResources].[EmployeePayHistory] b
+on a.BusinessEntityID=b.BusinessEntityID
+INNER JOIN (SELECT BusinessEntityID, RatechangeDate = MAX (RateChangeDate) 
+			FROM HumanResources.EmployeePayHistory
+			GROUP BY BusinessEntityID) N3
+	ON N3.BusinessEntityID = b.BusinessEntityID AND N3.RatechangeDate = b.RateChangeDate
+
+group by a.JobTitle,case 
+when DATEDIFF(YY,a.BirthDate,'2008-01-01')<18 THEN '<18'
+when DATEDIFF(YY,a.BirthDate,'2008-01-01')<35 THEN '18 - 35'
+when DATEDIFF(YY,a.BirthDate,'2008-01-01') <50 THEN '36 - 50'
+when DATEDIFF(YY,a.BirthDate,'2008-01-01') <60 THEN '51 - 60'
+ELSE '61+'
+END,b.Rate
+
+34.
+select c.Name,sum(a.Subtotal + a.Freight + a.TaxAmt) as revenue
+from [Sales].[SalesOrderHeader] a join [Person].[Address] b 
+on a.ShipToAddressID=b.AddressID
+join [Person].[StateProvince] c
+on c.StateProvinceID=b.StateProvinceID
+where YEAR(a.OrderDate)=2006
+group by c.Name
+order by sum(a.Subtotal + a.Freight + a.TaxAmt) DESC
+
+35.
+SELECT TOP 2
+	N2.FirstName
+	,N2.LastName
+	,N1.JobTitle
+FROM HumanResources.Employee N1
+INNER JOIN Person.Person N2 ON N1.BusinessEntityID = N2.BusinessEntityID
+
+WHERE N1.OrganizationLevel = (SELECT MAX (OrganizationLevel) 
+								FROM HumanResources.Employee)
+ORDER BY NEWID ()
+
+36.
+
+part 1 
+select a.SalesOrderID,b.OrderDate,sum(a.OrderQty * a.UnitPrice * a.UnitPriceDiscount) as TotalDiscount
+from [Sales].[SalesOrderDetail] a join [Sales].[SalesOrderHeader] b
+on a.SalesOrderID=b.SalesOrderID
+join [Sales].[SpecialOffer] c
+on c.SpecialOfferID=a.SpecialOfferID
+where a.UnitPriceDiscount>0 and c.Type='Volume Discount'
+group by a.SalesOrderID,b.OrderDate
+
+Part 2
+select YEAR(b.OrderDate),sum(a.OrderQty * a.UnitPrice * a.UnitPriceDiscount) as TotalDiscount
+from [Sales].[SalesOrderDetail] a join [Sales].[SalesOrderHeader] b
+on a.SalesOrderID=b.SalesOrderID
+join [Sales].[SpecialOffer] c
+on c.SpecialOfferID=a.SpecialOfferID
+where a.UnitPriceDiscount>0 and c.Type='Volume Discount'
+group by YEAR(b.OrderDate)
+order by YEAR(b.orderdate)
+
+37.
+
+select u.ProductID,MAX(u.MostExpensivePrice) as MostExpensivePrice ,MAX(u.SecondMostExpensivePrice) as SecondMostExpensivePrice,
+ROUND((MAX(u.MostExpensivePrice) - MAX(u.SecondMostExpensivePrice))/MAX(u.SecondMostExpensivePrice),2)
+from
+(select 
+v.ProductID,
+CASE WHEN v.ROWNUM=1 THEN v.LastReceiptCost ELSE NULL END as MostExpensivePrice,
+CASE WHEN v.ROWNUM=2 THEN v.LastReceiptCost ELSE NULL END as SecondMostExpensivePrice
+from (
+select 
+a.ProductID,
+a.LastReceiptCost,
+ROW_NUMBER() over (partition by a.ProductID order by a.LastReceiptCost DESC) as ROWNUM
+from [Purchasing].[ProductVendor] a) v
+where v.ROWNUM<3) u
+group by u.ProductID
+having MAX(u.SecondMostExpensivePrice) IS NOT NULL
+
+38.
+select  b.ProductModelID,d.Name as ProductName ,ROUND((b.ListPrice-b.StandardCost)/b.StandardCost,2)
+from  [Production].[Product] b join [Production].[ProductSubcategory] a
+on a.ProductSubcategoryID=b.ProductSubcategoryID
+join [Production].[ProductCategory] c
+on c.ProductCategoryID=a.ProductCategoryID
+join [Production].[ProductModel] d 
+on d.ProductModelID=b.ProductModelID
+where  b.SellEndDate IS NULL and c.Name='Bikes'
+group by  b.ProductModelID,d.Name ,ROUND((b.ListPrice-b.StandardCost)/b.StandardCost,2)
+order by ROUND((b.ListPrice-b.StandardCost)/b.StandardCost,2) DESC
+
+39.
+Part 1
+select a.BusinessEntityID,a.QuotaDate,a.SalesQuota,sum(b.SubTotal) as ActualSales , ROUND(sum(b.SubTotal)/(a.SalesQuota),2)
+
+from [Sales].[SalesPersonQuotaHistory] a
+join [Sales].[SalesOrderHeader] b 
+on a.BusinessEntityID=b.SalesPersonID
+and (b.OrderDate>=a.QuotaDate and b.OrderDate<DATEADD(MONTH,3,a.QuotaDate))
+group by a.BusinessEntityID,a.QuotaDate,a.SalesQuota
+order by a.BusinessEntityID
+
+40.
+
+select 
+case when a.Range='$0-$100' THEN 1
+when a.Range='$100-$500' THEN 2
+when a.Range='$500-$1000' THEN 3
+when a.Range='$1000-$2500' THEN 4
+when a.Range='$2500-$5000' THEN 5
+when a.Range='$5000-$10000' THEN 6
+when a.Range='$10000-$50000' THEN 7
+when a.Range='$50000-$100000' THEN 8
+ELSE 9 END as SortID,
+a.Range,
+count(a.SalesOrderID)
+from
+(select 
+SalesOrderId,
+case 
+when TotalDue <100 then '$0-$100'
+when TotalDue <500 then '$100-$500'
+when TotalDue <1000 then '$500-$1000'
+when TotalDue <2500 then '$1000-$2500'
+when TotalDue <5000 then '$2500-$5000'
+when TotalDue <10000 then '$5000-$10000'
+when TotalDue <50000 then '$10000-$50000'
+when TotalDue <100000 then '$50000-$100000'
+else '>$100,000' END as Range,
+TotalDue
+from [Sales].[SalesOrderHeader]
+where year(OrderDate)=2005) a
+group by case when a.Range='$0-$100' THEN 1
+when a.Range='$100-$500' THEN 2
+when a.Range='$500-$1000' THEN 3
+when a.Range='$1000-$2500' THEN 4
+when a.Range='$2500-$5000' THEN 5
+when a.Range='$5000-$10000' THEN 6
+when a.Range='$10000-$50000' THEN 7
+when a.Range='$50000-$100000' THEN 8
+ELSE 9 END ,
+ a.Range
+ order by
+ case when a.Range='$0-$100' THEN 1
+when a.Range='$100-$500' THEN 2
+when a.Range='$500-$1000' THEN 3
+when a.Range='$1000-$2500' THEN 4
+when a.Range='$2500-$5000' THEN 5
+when a.Range='$5000-$10000' THEN 6
+when a.Range='$10000-$50000' THEN 7
+when a.Range='$50000-$100000' THEN 8
+ELSE 9 END
+
+41.
+select a.PersonType, 
+sum(case when b.EmailAddress like '%adventure-works.com' THEN 1 ELSE 0 END) as AW_EMAIL,
+sum(case when b.EmailAddress not like '%adventure-works.com' THEN 1 ELSE 0 END) as NON_AW_EMAIL,
+count(*)
+from [Person].[Person] a join [Person].[EmailAddress] b
+on a.BusinessEntityID=b.BusinessEntityID
+where b.EmailAddress IS NOT NULL
+group by a.PersonType
+order by sum(case when b.EmailAddress like '%adventure-works.com' THEN 1 ELSE 0 END) DESC
+
+42.
+/* 5 most successful people to mentor 5 least successful people */
+
+select a.SalesPersonID,a.Revenue,b.SalesPersonID,b.Revenue
+from
+(select a.SalesPersonID,sum(a.SubTotal) as Revenue,
+row_number() over (order by sum(a.Subtotal) desc) as TOP_RN
+from [Sales].[SalesOrderHeader] a
+where YEAR(a.orderdate)=2008 and a.SalesPersonID is NOT NULL
+group by a.SalesPersonID) a
+join 
+(select a.SalesPersonID,sum(a.SubTotal) as Revenue,
+row_number() over (order by sum(a.Subtotal)) as BOTTOM_RN
+from [Sales].[SalesOrderHeader] a
+where YEAR(a.orderdate)=2008 and a.SalesPersonID is NOT NULL
+group by a.SalesPersonID) b
+on a.TOP_RN=b.BOTTOM_RN 
+where a.TOP_RN<=5 and b.BOTTOM_RN<=5
+
+43.
+CREATE TABLE HumanResources.Calendar 
+	(DateID INT
+	,[Date] DATETIME
+	,[Year] INT
+	,TextMonth VARCHAR (50)
+	,DateMonth DATETIME
+	,[DayOfWeek] VARCHAR (50)
+	,IsBusinessDay TINYINT)
+
+DECLARE @StartDate DATETIME = '1990-01-01'
+DECLARE @EndDate DATETIME = '2015-01-01'
+
+DECLARE @TotalDays INT = DATEDIFF (DAY, @StartDate, @EndDate) + 1                 ;
+
+DECLARE @Index INT = 1
+
+WHILE @Index <= @TotalDays
+BEGIN
+	INSERT INTO HumanResources.Calendar (DateID)
+	SELECT @Index
+	SET @Index = @Index + 1
+END
+
+UPDATE N1
+SET [Date] = DATEADD (DAY, DateID - 1, @StartDate)
+FROM HumanResources.Calendar N1
+
+UPDATE N1 
+	SET
+		[Year] =			YEAR ([Date])
+		,TextMonth	=		DATENAME (MONTH, [Date]) + ' ' + DATENAME (YEAR, [Date])
+		,DateMonth	=		DATEADD (MONTH, DATEDIFF (MONTH, 0, [Date]), 0)
+		,[DayOfWeek] =		DATENAME (DW, [Date])
+		,IsBusinessDay =	CASE WHEN DATENAME (DW, [Date]) IN ('Saturday', 'Sunday')
+								THEN 0 ELSE 1 END
+FROM HumanResources.Calendar N1
+
+SELECT
+	[Year]
+	,BusinessDays = SUM (IsBusinessDay)
+FROM HumanResources.Calendar
+GROUP BY [Year]
+ORDER BY [Year]
+
+44.
+SELECT *
+	,BusinessEntityOrder =	ROW_NUMBER () OVER (PARTITION BY BusinessEntityID 
+												ORDER BY RateChangeDate)
+
+	,RateEndDate =			CONVERT (DATETIME, NULL)
+	,BusinessDays =			CONVERT (INT, NULL)
+INTO #EmployeePayHistory
+FROM HumanResources.EmployeePayHistory 
+
+UPDATE N1 
+	SET	RateEndDate	=		(SELECT TOP 1 RateChangeDate
+								FROM #EmployeePayHistory X1
+								WHERE N1.BusinessEntityID = X1.BusinessEntityID
+									AND X1.BusinessEntityOrder = N1.BusinessEntityOrder + 1         
+								ORDER BY X1.RateChangeDate)
+FROM #EmployeePayHistory N1
+
+
+UPDATE N1 
+	SET BusinessDays =		(SELECT COUNT (*)
+								FROM HumanResources.Calendar X1
+								WHERE X1.[Date] BETWEEN N1.RateChangeDate 
+									AND ISNULL (N1.RateEndDate, '2009-01-01')
+								AND X1.IsBusinessDay = 1)
+FROM #EmployeePayHistory N1
+
+--DROP TABLE #EmployeePayCalendar
+
+SELECT *
+	,DailyPay = Rate * 8
+INTO #EmployeePayCalendar
+FROM #EmployeePayHistory N1
+INNER JOIN HumanResources.Calendar N2 ON 1 = 1
+	AND N2.[Date] >= N1.RateChangeDate 
+	AND N2.[Date] < ISNULL (N1.RateEndDate, '2009-01-01')                               
+	AND N2.IsBusinessDay = 1
+
+SELECT
+	BusinessEntityID
+	,WorkingYear =	[Year]
+	,TotalPay =		SUM (DailyPay)
+FROM #EmployeePayCalendar
+WHERE [Year] BETWEEN 2005 AND 2008
+GROUP BY BusinessEntityID, [Year]
+ORDER BY BusinessEntityID, [Year]
+
+46.
+
+select a.BusinessEntityID,b.JobTitle,c.FirstName,c.LastName,a.Rate * 50 as Bonus
+from [HumanResources].[EmployeePayHistory] a join [HumanResources].[Employee] b
+on a.BusinessEntityID=b.BusinessEntityID
+join [Person].[Person]c
+on c.BusinessEntityID=a.BusinessEntityID
+where b.SalariedFlag=1
+
+47.
+select a.BusinessEntityID,a.FirstName+' '+a.LastName+case when a.Suffix is null then '' else ','+ a.Suffix end as fullname,
+c.Name as DepartmentName
+from [Person].[Person] a join  [HumanResources].[EmployeeDepartmentHistory] b
+on a.BusinessEntityID=b.BusinessEntityID
+join [HumanResources].[Department] c
+on c.DepartmentID=b.DepartmentID
+where b.ENDDATE IS NULL
+order by c.Name,a.FirstName+' '+a.LastName+case when a.Suffix is null then '' else ','+ a.Suffix end
+
+48.
+SELECT DISTINCT
+	N1.BusinessEntityID
+	,SalesRepLastName =		N4.LastName
+	,Yr2006StartQuota =		N2.SalesQuota
+	,Yr2007EndQuota =		N3.SalesQuota
+	,[%ChangeQuota] =		(N3.SalesQuota - N2.SalesQuota) / N2.SalesQuota * 100
+FROM Sales.SalesPersonQuotaHistory N1
+INNER JOIN Sales.SalesPersonQuotaHistory N2 ON
+	N1.BusinessEntityID = N2.BusinessEntityID 
+	AND N2.QuotaDate = (SELECT MIN (QuotaDate) 
+						FROM Sales.SalesPersonQuotaHistory 
+						WHERE YEAR (QuotaDate) = 2006)
+INNER JOIN Sales.SalesPersonQuotaHistory N3 ON
+	N1.BusinessEntityID = N3.BusinessEntityID
+	AND N3.QuotaDate = (SELECT MAX (QuotaDate) 
+						FROM Sales.SalesPersonQuotaHistory 
+						WHERE YEAR (QuotaDate) = 2007)
+INNER JOIN Person.Person AS N4 ON N1.BusinessEntityID = N4.BusinessEntityID
+
+49.
+/* Scrap Rate=Scrap Quantity/Order Quantity ; for orders with Scrap Rate>3% ; WorkOrderID,DueDate,ProductName,
+Scrapreason,Scrapped Quantity,Order Quantity,Pct Scrapped */
+
+select TOP 10 PERCENT a.WorkOrderID,a.DueDate,c.Name as ProductName,b.Name as ScrapReason,a.ScrappedQty,a.OrderQty,(a.ScrappedQty/CONVERT(FLOAT,a.OrderQty)) * 100 as pct_scrapped
+from [Production].[WorkOrder] a left join   [Production].[ScrapReason] b
+on a.ScrapReasonID=b.ScrapReasonID
+left join [Production].[Product] c
+on a.ProductID=c.ProductID
+where a.ScrappedQty>0 and (a.ScrappedQty/CONVERT(FLOAT,a.OrderQty)) * 100>3
+order by a.DueDate DESC
+
+50.
+select v.ReasonName,v.ReasonType,count(v.SalesOrderID) from
+(select a.SalesOrderID,b.Name as ReasonName,
+case when COUNT(c.SalesOrderID)>1 then 'Contributing Reason' ELSE 'Exclusion Reason' END as ReasonType
+from [Sales].[SalesOrderHeaderSalesReason] a join [Sales].[SalesReason] b
+on a.SalesReasonID=b.SalesReasonID
+join [Sales].[SalesOrderHeaderSalesReason] c on 
+a.SalesOrderID=c.SalesOrderID
+group by a.SalesOrderID,b.Name) v
+group by  v.ReasonName,v.ReasonType
+
+51.
+Part 1
+select a.SpecialOfferID,a.Type as DiscType,a.Category,a.Description,a.StartDate,a.EndDate,a.DiscountPct
+from [Sales].[SpecialOffer] a
+where a.Type='Excess Inventory' and a.Category IN ('Customer','Reseller')
+
+Part 2
+select a.SpecialOfferID,a.Type as DiscType,a.Category,a.Description,a.StartDate,a.EndDate,a.DiscountPct,
+count(distinct b.SalesOrderID) as NumOrdersDiscApplied
+from [Sales].[SpecialOffer] a left join [Sales].[SalesOrderDetail] b
+on a.SpecialOfferID=b.SpecialOfferID
+where a.Type='Excess Inventory' and a.Category IN ('Customer','Reseller')
+group by  a.SpecialOfferID,a.Type,a.Category,a.Description,a.StartDate,a.EndDate,a.DiscountPct
+
+52.
+select a.BusinessEntityID,max(case when a.Rnk=1 THEN a.Rate END) as LatestPayRate, max(case when a.Rnk=2 then a.Rate else 0 END) as PreviousRate
+,case WHEN max(case when a.Rnk=2 then a.Rate else 0 END) >0 then ((max(case when a.Rnk=1 THEN a.Rate END)- max(case when a.Rnk=2 then a.Rate else 0 END))/ max(case when a.Rnk=2 then a.Rate else 0 END)) * 100 else null end as pct_change
+
+from
+(select a.BusinessEntityID,a.Rate,ROW_NUMBER() over (partition by a.BusinessEntityID order by a.RateChangeDate DESC) as Rnk
+from [HumanResources].[EmployeePayHistory] a
+) a
+where a.Rnk<3
+group by a.BusinessEntityID
+
+
+
+
+
+
+
